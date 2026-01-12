@@ -1,22 +1,19 @@
 import os
 
-# -----------------------------------------------------------
-# 👇 核心魔法：设置国内镜像加速 (必须放在最前面！)
+# 1. 必加：国内镜像加速，防止下载模型卡死
 os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
-# -----------------------------------------------------------
 
 from tqdm import tqdm
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-# 👇 这里改用了最新的写法，消除红字警告
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 
 # --- 配置区域 ---
 DATA_FOLDER = "./data"
 DB_PATH = "./chroma_db"
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 50
+# 👇 核心修改：换成了国产最强轻量级中文模型 (BGE)
+MODEL_NAME = "BAAI/bge-small-zh-v1.5"
 
 
 def build_database():
@@ -27,9 +24,10 @@ def build_database():
         return
 
     # 2. 读取与切割
-    print(f"📦 正在处理 {len(pdf_files)} 份年报，这一步已经验证过没问题...")
+    print(f"📦 正在处理 {len(pdf_files)} 份年报...")
     all_documents = []
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+    # 这里把 chunk_size 稍微调大一点，BGE 模型支持长文本更好
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=600, chunk_overlap=100)
 
     for filename in tqdm(pdf_files, desc="解析进度"):
         file_path = os.path.join(DATA_FOLDER, filename)
@@ -45,19 +43,34 @@ def build_database():
 
     print(f"\n📊 累计获得 {len(all_documents)} 个知识片段。")
 
-    # 3. 向量化（关键！）
-    print("\n🚀 正在下载模型并存入数据库（开了加速，这次会很快）...")
+    # 3. 向量化（核心升级）
+    print(f"\n🚀 正在下载并加载中文模型: {MODEL_NAME} ...")
 
-    # 这里的模型名字不用改，有了上面的镜像配置，它会自动走国内通道
-    embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
-    vectordb = Chroma.from_documents(
-        documents=all_documents,
-        embedding=embedding_model,
-        persist_directory=DB_PATH
+    embedding_model = HuggingFaceEmbeddings(
+        model_name=MODEL_NAME,
+        # 强制使用 CPU (防止部分同学电脑没显卡报错)，如果你有显卡想加速，把下面这行删掉即可
+        model_kwargs={'device': 'cpu'},
+        encode_kwargs={'normalize_embeddings': True}  # BGE 模型建议开启归一化
     )
 
-    print(f"\n🎉 大功告成！数据库已保存在：{DB_PATH}")
+    print("💾 正在初始化数据库...")
+    # 先创建一个空的数据库连接
+    vectordb = Chroma(
+        persist_directory=DB_PATH,
+        embedding_function=embedding_model
+    )
+
+    # --- 核心修改：分批写入 (Batching) ---
+    print(f"🔄 开始分批写入数据 (总量: {len(all_documents)})...")
+
+    BATCH_SIZE = 5000  # 每次只写 5000 条，绝对安全 (小于 5461)
+
+    for i in range(0, len(all_documents), BATCH_SIZE):
+        batch = all_documents[i: i + BATCH_SIZE]
+        print(f"   - 正在写入第 {i} 到 {i + len(batch)} 条数据...")
+        vectordb.add_documents(batch)
+
+    print(f"\n🎉 升级完成！中文知识库已重建：{DB_PATH}")
 
 
 if __name__ == "__main__":
