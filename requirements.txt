@@ -1,8 +1,21 @@
-langchain
-langchain-community
-pypdf
-python-dotenv
-sentence-transformers
+# --- 核心框架 (LangChain 0.2 黄金稳定版) ---
+langchain==0.2.14
+langchain-community==0.2.12
+langchain-core==0.2.33
+langchain-text-splitters==0.2.2
+langchain-huggingface==0.0.3
+
+# --- 向量数据库 ---
 chromadb
+
+# --- 大模型接口 ---
 dashscope
+
+# --- Web 界面 ---
 streamlit
+watchdog
+
+# --- 工具库 ---
+python-dotenv
+pypdf
+tqdm
