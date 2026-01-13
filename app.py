@@ -76,6 +76,12 @@ with st.sidebar:
         st.error("❌ 数据库未找到，请先运行 build 脚本")
 
     st.markdown("---")
+
+    # 👇 新增功能：清空历史记录按钮
+    if st.button("🗑️ 清空对话历史"):
+        st.session_state.messages = []
+        st.rerun()  # 立即刷新页面
+
     st.markdown("### 💡 提问示例")
     st.code("中国电信2024年的经营收入是多少？")
     st.code("分析一下贵州茅台的利润分配方案")
